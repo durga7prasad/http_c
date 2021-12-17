@@ -1,9 +1,4 @@
-#include <stdio.h>
-
-/* Socket headers */
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
+#include "socket.h"
 
 /* Creates a socket and returns fd */
 
@@ -24,7 +19,7 @@ int Socket_Create(int *sfd, int domain, int type, int protocol)
 	{
 		*sfd = status;
 	}
-	status = setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+	status = setsockopt(*sfd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 	if (status != 0)
 	{
 		printf ("Failed to set socket option\n");
@@ -64,4 +59,32 @@ int Socket_Listen(int sfd, int backlog)
 		perror ("Listen Err:");
 	}
 	return status;
+}
+
+int Socket_Close (int sfd)
+{
+	int status = 0;
+
+	status = close(sfd);
+	if (status != 0)
+	{
+		printf ("socket (%d) close failed\n", sfd);
+		perror ("Close Err:");
+	}
+	return status;
+}
+
+int Socket_Accept(int *cfd, int sfd, struct sockaddr *caddr, socklen_t *caddrlen)
+{
+	int status = 0;
+
+	status = accept(sfd, caddr, caddrlen);
+	if (status != 0)
+	{
+		/* Accept failed */
+		return status;
+	}
+	/* store the client fd */
+	*cfd = status;
+	return 0;
 }
