@@ -1,0 +1,67 @@
+#include <stdio.h>
+
+/* Socket headers */
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+
+/* Creates a socket and returns fd */
+
+int Socket_Create(int *sfd, int domain, int type, int protocol)
+{
+	int status = 0;
+	int option = 1;
+
+	/* Create a socket */
+	status = socket (domain, type, protocol);
+	if (status != 0)
+	{
+		printf ("Failed to create socket\n");
+		perror ("Socket Err:");
+		return status;
+	}
+	else
+	{
+		*sfd = status;
+	}
+	status = setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+	if (status != 0)
+	{
+		printf ("Failed to set socket option\n");
+		perror ("setsockopt Err:");
+	}
+	return status;
+}
+
+/* Binds the socket fd to the given port */
+
+int Socket_Bind(int sfd, int port)
+{
+	int status = 0;
+	struct sockaddr_in saddr;
+
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(port);
+	saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	status = bind (sfd, (struct sockaddr *)&saddr, sizeof(saddr));
+	if (status != 0)
+	{
+		printf ("bind failed with port: %d\n", port);
+		perror ("Bind Err:");
+	}
+	return status;
+}
+
+int Socket_Listen(int sfd, int backlog)
+{
+	int status = 0;
+
+	status = listen(sfd, backlog);
+	if (status != 0)
+	{
+		printf ("listen failed with fd: %d\n", sfd);
+		perror ("Listen Err:");
+	}
+	return status;
+}
