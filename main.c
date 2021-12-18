@@ -29,13 +29,8 @@ int main(int argc, char *argv[])
 		printf ("httpd init failed\n");
 		return status;
 	}
-	status = httpd_server();
-	if (status != 0)
-	{
-		/* Server start failed */
-		return status;
-	}
-	status = httpd_handler(gcfd);
+	httpd_server();
+	/* Should not come here */ 
 	return 0;
 }
 

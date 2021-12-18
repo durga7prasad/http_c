@@ -17,6 +17,4 @@ int httpd_init(void);
 
 int httpd_server(void);
 
-int httpd_handler(int cfd);
-
 #endif	/* _HTTPD_H_ */

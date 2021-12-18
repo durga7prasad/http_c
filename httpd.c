@@ -1,5 +1,8 @@
 #include "httpd.h"
 #include "socket.h"
+#include <string.h>
+
+static void httpd_handler(int cfd);
 
 int httpd_init(void)
 {
@@ -33,21 +36,50 @@ int httpd_init(void)
 int httpd_server()
 {
 	int status = 0;
+	struct sockaddr_in caddr;
+	int caddrlen;
+	char *pclient = NULL;
 
-	/* wait for client connection */
-	printf ("Waiting for client to connect...\n");
-	status = Socket_Accept(&gcfd, gsfd, NULL, NULL);
-	if (status != 0)
+	caddrlen = sizeof(caddr);
+	/*Loop forever */
+	while (1)
 	{
-		/* accept failed */
-		return status;
+		/* wait for client connection */
+		printf ("Waiting for client to connect...\n");
+		status = Socket_Accept(&gcfd, gsfd, (struct sockaddr *)&caddr, &caddrlen);
+		if (status != 0)
+		{
+			/* accept failed */
+			return status;
+		}
+		pclient = inet_ntoa(caddr.sin_addr);
+		printf ("Client: %s\n", pclient);
+		/* Handle the client requests till disconnects */
+		httpd_handler(gcfd);
 	}
+	return status;
 }
 
-int httpd_handler(int cfd)
+void dump_data(unsigned char *data, int len)
+{
+	int loop;
+
+	printf ("\n============ DUMP START ==========\n");
+	for (loop = 0; loop < len; loop++)
+	{
+		printf ("%c", data[loop]);
+	}
+	printf ("\n============ DUMP END ============\n");
+
+	return;
+}
+
+void httpd_handler(int cfd)
 {
 	int status = 0;
 	int readlen = 0;
+	char buf[1024] = {0};
+	char method[1024], uri[1024], version[1024];
 
 	/* Loop forever */
 	while (1)
@@ -62,13 +94,25 @@ int httpd_handler(int cfd)
 		else if (readlen == 0)
 		{
 			/* Client got disconnected */
+			printf ("OOps!! No data received\n");
 			status = 1;
 			Socket_Close (cfd);
 			break;
 		}
 		/* We receive data */
 		printf ("Got %d Bytes of data\n", readlen);
-		printf ("Data:\n%s\n", grx_data);
+		dump_data (grx_data, readlen);
+		/* Handle http request */
+		sscanf(grx_data, "%s %s %s\n", method, uri, version);
+		strcpy (buf, version);
+		strcat (buf, " 200 OK\r\n");
+		strcat (buf, "Server: VDP_HTTPD\n");
+		strcat (buf, "Content-Length: 2\n");
+		strcat (buf, "Content-Type: text/html\n");
+		send (cfd, buf, 56, 0);
+		printf ("response sent\n");
+		send (cfd, "hi", 2, 0);
+		dump_data (buf, 1024);
 	}
-	return status;
+	return;
 }

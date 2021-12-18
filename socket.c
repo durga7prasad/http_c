@@ -9,7 +9,7 @@ int Socket_Create(int *sfd, int domain, int type, int protocol)
 
 	/* Create a socket */
 	status = socket (domain, type, protocol);
-	if (status != 0)
+	if (status == -1)
 	{
 		printf ("Failed to create socket\n");
 		perror ("Socket Err:");
@@ -45,6 +45,7 @@ int Socket_Bind(int sfd, int port)
 		printf ("bind failed with port: %d\n", port);
 		perror ("Bind Err:");
 	}
+	printf ("Server bind with port:%d\n", port);
 	return status;
 }
 
@@ -79,12 +80,15 @@ int Socket_Accept(int *cfd, int sfd, struct sockaddr *caddr, socklen_t *caddrlen
 	int status = 0;
 
 	status = accept(sfd, caddr, caddrlen);
-	if (status != 0)
+	if (status == -1)
 	{
 		/* Accept failed */
+		printf ("Accept failed\n");
+		perror ("Accept Err:");
 		return status;
 	}
 	/* store the client fd */
 	*cfd = status;
+	printf ("Client got connected (%d)\n", status);
 	return 0;
 }
