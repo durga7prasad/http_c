@@ -80,10 +80,12 @@ void httpd_handler(int cfd)
 	int readlen = 0;
 	char buf[1024] = {0};
 	char method[1024], uri[1024], version[1024];
+	FILE *fp;
 
 	/* Loop forever */
 	while (1)
 	{
+		printf ("waiting for client request...\n");
 		readlen = recv (cfd, grx_data, MAX_BUFF_LEN, 0);
 		if (readlen < 0)
 		{
@@ -96,7 +98,6 @@ void httpd_handler(int cfd)
 			/* Client got disconnected */
 			printf ("OOps!! No data received\n");
 			status = 1;
-			Socket_Close (cfd);
 			break;
 		}
 		/* We receive data */
@@ -105,14 +106,35 @@ void httpd_handler(int cfd)
 		/* Handle http request */
 		sscanf(grx_data, "%s %s %s\n", method, uri, version);
 		strcpy (buf, version);
-		strcat (buf, " 200 OK\r\n");
+		strcat (buf, " 200 OK\n");
 		strcat (buf, "Server: VDP_HTTPD\n");
-		strcat (buf, "Content-Length: 2\n");
+		strcat (buf, "Accept-Ranges: bytes\n");
+		strcat (buf, "Content-Length: 5\n");
 		strcat (buf, "Content-Type: text/html\n");
-		send (cfd, buf, 56, 0);
+		strcat (buf, "Connection: Keep-Alive\n\n");
+		send (cfd, buf, 121, 0);
 		printf ("response sent\n");
-		send (cfd, "hi", 2, 0);
+#if 1
+		send (cfd, "Hello",5,0);
 		dump_data (buf, 1024);
+#else
+		fp = fopen ("dp.jpg", "rb");
+		if (fp == NULL)
+		{
+			perror ("fopen Err:");
+			break;
+		}
+		int len = 47894;
+		while (len)
+		{
+			readlen = fread(buf, 1, 1024, fp);
+			//send the read bytes
+			send (cfd, buf, readlen, 0);
+			//printf ("Sent: %d (%d)\n", readlen, len);
+			len -= readlen;
+		}
+#endif
 	}
+	Socket_Close (cfd);
 	return;
 }
