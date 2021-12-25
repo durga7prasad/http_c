@@ -67,6 +67,11 @@ int httpd_server()
 		printf ("Client: %s\n", pclient);
 		/* Handle the client requests till disconnects */
 		httpd_handler(gcfd);
+		/*
+		 * Client socket closed in handler
+		 * So clearing descriptor
+		 */
+		gcfd = 0;
 	}
 	return status;
 }
@@ -126,6 +131,7 @@ static void handle_request(char *request, int req_len, int cfd)
 	int ResponseCode, ContentType, DataLen;
 	struct stat file_info;
 	int fd;
+	char file_path[128];
 
 	/* Extract method, uri & version */
 	sscanf(grx_data, "%s %s %s\n", method, uri, version);
@@ -137,14 +143,30 @@ static void handle_request(char *request, int req_len, int cfd)
 		return;
 	}
 	/* TODO: Handle uri */
+	if (strcmp (uri, "/") == 0)
+	{
+		strcpy (file_path, "res/Index.html");
+	}
+	else
+	{
+		char *temp;
+		/* Is it query? */
+		temp = strchr(uri, '?');
+		if (temp)
+		{
+			/* removing '?' to get file path */
+			*temp = '\0';
+		}
+		sprintf (file_path, "res/%s", uri);
+	}
 	ResponseCode = HTTP_200;
 	ContentType = HTTP_TEXT_HTML;
 
 	/* Get file length */
-	fd = open("res/index.html", S_IRUSR);
+	fd = open(file_path, S_IRUSR);
 	if (fd == -1)
 	{
-		printf ("File open failed\n");
+		printf ("File (%s) open failed\n", file_path);
 		perror ("open");
 		/* TODO: Set 404 and send */
 		return;
@@ -154,6 +176,7 @@ static void handle_request(char *request, int req_len, int cfd)
 	{
 		printf ("Unable to get file details\n");
 		perror ("fstat");
+		close (fd);
 		return;
 	}
 	DataLen = file_info.st_size;
@@ -166,6 +189,7 @@ static void handle_request(char *request, int req_len, int cfd)
 	if (status == FAIL)
 	{
 		/* Header not sent!! don't send data */
+		close (fd);
 		return;
 	}
 	/* Send data of DataLen bytes */
@@ -177,6 +201,8 @@ static void handle_request(char *request, int req_len, int cfd)
 		send (cfd, buf, status, 0);
 		DataLen -= status;
 	}
+
+	close(fd);
 	return;
 }
 
@@ -185,6 +211,11 @@ static int IsSupported_Method(char *method)
 	int status = 0;
 
 	status = strcmp (method, "GET");
+	if (status == 0)
+	{
+		return TRUE;
+	}
+	status = strcmp (method, "POST");
 	if (status == 0)
 	{
 		return TRUE;
