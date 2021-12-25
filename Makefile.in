@@ -3,7 +3,7 @@
 #
 
 TARGET		=	httpd
-C_FLAGS		:=	-c
+C_FLAGS		:=	-c -MMD
 O_FLAGS		:=	-o
 LD_FLAGS	:=
 
