@@ -1,8 +1,15 @@
 #include "httpd.h"
 #include "socket.h"
 #include <string.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 static void httpd_handler(int cfd);
+static void handle_request(char *request, int req_len, int cfd);
+static int IsSupported_Method(char *method);
+static int send_response_header(int cfd, int resp, int type, int len);
 
 int httpd_init(void)
 {
@@ -78,9 +85,6 @@ void httpd_handler(int cfd)
 {
 	int status = 0;
 	int readlen = 0;
-	char buf[1024] = {0};
-	char method[1024], uri[1024], version[1024];
-	FILE *fp;
 
 	/* Loop forever */
 	while (1)
@@ -104,37 +108,131 @@ void httpd_handler(int cfd)
 		printf ("Got %d Bytes of data\n", readlen);
 		dump_data (grx_data, readlen);
 		/* Handle http request */
-		sscanf(grx_data, "%s %s %s\n", method, uri, version);
-		strcpy (buf, version);
-		strcat (buf, " 200 OK\n");
-		strcat (buf, "Server: VDP_HTTPD\n");
-		strcat (buf, "Accept-Ranges: bytes\n");
-		strcat (buf, "Content-Length: 5\n");
-		strcat (buf, "Content-Type: text/html\n");
-		strcat (buf, "Connection: Keep-Alive\n\n");
-		send (cfd, buf, 121, 0);
-		printf ("response sent\n");
-#if 1
-		send (cfd, "Hello",5,0);
-		dump_data (buf, 1024);
-#else
-		fp = fopen ("dp.jpg", "rb");
-		if (fp == NULL)
-		{
-			perror ("fopen Err:");
-			break;
-		}
-		int len = 47894;
-		while (len)
-		{
-			readlen = fread(buf, 1, 1024, fp);
-			//send the read bytes
-			send (cfd, buf, readlen, 0);
-			//printf ("Sent: %d (%d)\n", readlen, len);
-			len -= readlen;
-		}
-#endif
+		handle_request(grx_data, readlen, cfd);
 	}
 	Socket_Close (cfd);
 	return;
+}
+
+static void handle_request(char *request, int req_len, int cfd)
+{
+	char method[128], uri[128], version[128];
+	int status = 0, len = 0;
+	char buf[1024];
+	int ResponseCode, ContentType, DataLen;
+	struct stat file_info;
+	int fd;
+
+	/* Extract method, uri & version */
+	sscanf(grx_data, "%s %s %s\n", method, uri, version);
+	/* Is method supported? */
+	status = IsSupported_Method(method);
+	if (status != TRUE)
+	{
+		/* Method not supported */
+		return;
+	}
+	/* TODO: Handle uri */
+	ResponseCode = HTTP_200;
+	ContentType = HTTP_TEXT_HTML;
+
+	/* Get file length */
+	fd = open("res/index.html", S_IRUSR);
+	if (fd == -1)
+	{
+		printf ("File open failed\n");
+		perror ("open");
+		/* TODO: Set 404 and send */
+		return;
+	}
+	status = fstat(fd, &file_info);
+	if (status == -1)
+	{
+		printf ("Unable to get file details\n");
+		perror ("fstat");
+		return;
+	}
+	DataLen = file_info.st_size;
+	/*
+	 * Send response
+	 * -> Send response headers
+	 * -> Send data
+	 */
+	status = send_response_header (cfd, ResponseCode, ContentType, DataLen);
+	if (status == FAIL)
+	{
+		/* Header not sent!! don't send data */
+		return;
+	}
+	/* Send data of DataLen bytes */
+	while (DataLen > 0)
+	{
+		/* Read data */
+		status = read (fd, buf, 1024);
+		/* send to client (readbytes) */
+		send (cfd, buf, status, 0);
+		DataLen -= status;
+	}
+	return;
+}
+
+static int IsSupported_Method(char *method)
+{
+	int status = 0;
+
+	status = strcmp (method, "GET");
+	if (status == 0)
+	{
+		return TRUE;
+	}
+	/* Unsupported method */
+
+	return FALSE;
+}
+
+static int send_response_header (int cfd, int resp, int type, int len)
+{
+	char buf[1024];
+	int offset = 0, ret = 0;
+
+	switch (resp)
+	{
+		case HTTP_200:
+			ret = sprintf (buf+offset, "%s", HTTP_SUCCESS);
+			offset += ret;
+			break;
+		case HTTP_404:
+			break;
+		default:
+			/* Unsupported */
+			return FAIL;
+	}
+	ret = sprintf (buf+offset, "%s", SERVER_NAME);
+	offset += ret;
+	ret = sprintf (buf+offset, "%s", ACCEPT_RANGES_BYTES);
+	offset += ret;
+	ret = sprintf (buf+offset, "%s", CONTENT_LENGTH);
+	offset += ret;
+	ret = sprintf (buf+offset, "%d\n", len);
+	offset += ret;
+	switch (type)
+	{
+		case HTTP_TEXT_HTML:
+			ret = sprintf (buf+offset, "%s", CONTENT_TYPE_HTML);
+			offset += ret;
+			break;
+		case HTTP_TEXT_PLAIN:
+			break;
+		default:
+			/* Unsupported */
+			return FAIL;
+	}
+	ret = sprintf (buf+offset, "%s", CONNECTION_ALIVE);
+	offset += ret;
+	ret = sprintf (buf+offset, "%s", HTTP_NEW_LINE);;
+	offset += ret;
+	/* Send response */
+	send (cfd, buf, offset, 0);
+	printf ("response %d bytes sent\n", offset);
+	dump_data (buf, offset);
 }

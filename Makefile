@@ -50,13 +50,6 @@ INC_DIRS := $(shell find $(SRC_DIR) -type d)
 # Add a prefix to INC_DIRS. So moduleA would become -ImoduleA. GCC understands this -I flag
 INC_FLAGS := $(addprefix -I,$(INC_DIR))
 
-# Make help rule to display available rules
-help:
-	@echo "	make		-	To make all target(s)"
-	@echo "	make all	-	To make all target(s)"
-	@echo "	make httpd	-	To make httpd binary"
-	@echo "	make V=1	-	Use V=1 option to enable command verbose"
-
 # Default Make
 all:	$(TARGET)
 
@@ -88,6 +81,13 @@ $(BUILD_DIR)/%.o: %.c
 clean:
 	$(Q) $(RM_DIR) $(BUILD_DIR)
 	@echo "	[RM]	$(BUILD_DIR)"
+
+# Make help rule to display available rules
+help:
+	@echo "	make		-	To make all target(s)"
+	@echo "	make all	-	To make all target(s)"
+	@echo "	make httpd	-	To make httpd binary"
+	@echo "	make V=1	-	Use V=1 option to enable command verbose"
 
 
 .PHONY:	all	remake	clean	cleaner	directories
