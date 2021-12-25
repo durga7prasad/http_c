@@ -1,0 +1,18 @@
+#
+# Author - VenkataDurgaPrasad.B
+#
+
+TARGET		=	httpd
+C_FLAGS		:=	-c -MMD
+O_FLAGS		:=	-o
+LD_FLAGS	:=
+
+CC			?=	gcc
+RM			?=	rm -f
+RM_DIR		?=	rm -rf
+MK_DIR		?=	mkdir
+
+SRC_DIR		:= src
+INC_DIR		:= inc
+BUILD_DIR	:= build
+TARGET_DIR	:= bin
