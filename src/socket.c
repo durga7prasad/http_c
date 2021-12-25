@@ -1,3 +1,7 @@
+/*
+ * Author - VenkataDurgaPrasad.B
+ */
+
 #include "socket.h"
 
 /* Creates a socket and returns fd */
