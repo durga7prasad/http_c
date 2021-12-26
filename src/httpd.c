@@ -118,6 +118,7 @@ void httpd_handler(int cfd)
 		dump_data (grx_data, readlen);
 		/* Handle http request */
 		handle_request(grx_data, readlen, cfd);
+		break;
 	}
 	Socket_Close (cfd);
 	return;
@@ -128,7 +129,7 @@ static void handle_request(char *request, int req_len, int cfd)
 	char method[128], uri[128], version[128];
 	int status = 0, len = 0;
 	char buf[1024];
-	int ResponseCode, ContentType, DataLen;
+	int ResponseCode, ContentType, DataLen, method_type;
 	struct stat file_info;
 	int fd;
 	char file_path[128];
@@ -136,10 +137,42 @@ static void handle_request(char *request, int req_len, int cfd)
 	/* Extract method, uri & version */
 	sscanf(grx_data, "%s %s %s\n", method, uri, version);
 	/* Is method supported? */
-	status = IsSupported_Method(method);
-	if (status != TRUE)
+	method_type = IsSupported_Method(method);
+	if (method_type == METHOD_UNSUPPORTED)
 	{
 		/* Method not supported */
+		/* Set 501 and send */
+		ResponseCode = HTTP_501;
+		ContentType = HTTP_TEXT_HTML;
+		DataLen = sprintf(buf, HTTP_ERR_RESPONSE, 501, "Not Implemented");
+		status = send_response_header (cfd, ResponseCode, ContentType, DataLen);
+		if (status == FAIL)
+		{
+			/* Header not sent!! don't send data */
+			return;
+		}
+		send (cfd, buf, DataLen, 0);
+		return;
+	}
+	if (method_type == METHOD_TRACE)
+	{
+		ResponseCode = HTTP_200;
+		ContentType = HTTP_TRACE;
+		DataLen = req_len;
+		status = send_response_header (cfd, ResponseCode, ContentType, DataLen);
+		if (status == FAIL)
+		{
+			/* Header not sent!! don't send data */
+			return;
+		}
+		/* Send data of DataLen bytes */
+		while (DataLen > 0)
+		{
+			status = (DataLen > 1024) ? 1024: DataLen;
+			/* send to client (readbytes) */
+			send (cfd, grx_data, status, 0);
+			DataLen -= status;
+		}
 		return;
 	}
 	/* TODO: Handle uri */
@@ -168,7 +201,17 @@ static void handle_request(char *request, int req_len, int cfd)
 	{
 		printf ("File (%s) open failed\n", file_path);
 		perror ("open");
-		/* TODO: Set 404 and send */
+		/* Set 404 and send */
+		ResponseCode = HTTP_404;
+		ContentType = HTTP_TEXT_HTML;
+		DataLen = sprintf(buf, HTTP_ERR_RESPONSE, 404, "Not Found");
+		status = send_response_header (cfd, ResponseCode, ContentType, DataLen);
+		if (status == FAIL)
+		{
+			/* Header not sent!! don't send data */
+			return;
+		}
+		send (cfd, buf, DataLen, 0);
 		return;
 	}
 	status = fstat(fd, &file_info);
@@ -176,6 +219,19 @@ static void handle_request(char *request, int req_len, int cfd)
 	{
 		printf ("Unable to get file details\n");
 		perror ("fstat");
+		/* Set 500 and send */
+		ResponseCode = HTTP_500;
+		ContentType = HTTP_TEXT_HTML;
+		DataLen = sprintf(buf, HTTP_ERR_RESPONSE, 500, "Internal Server Error");
+		status = send_response_header (cfd, ResponseCode, ContentType, DataLen);
+		if (status == FAIL)
+		{
+			/* Header not sent!! don't send data */
+			close (fd);
+			return;
+		}
+		send (cfd, buf, DataLen, 0);
+
 		close (fd);
 		return;
 	}
@@ -192,14 +248,18 @@ static void handle_request(char *request, int req_len, int cfd)
 		close (fd);
 		return;
 	}
-	/* Send data of DataLen bytes */
-	while (DataLen > 0)
+	/* If method is HEAD, then don't send data */
+	if (method_type != METHOD_HEAD)
 	{
-		/* Read data */
-		status = read (fd, buf, 1024);
-		/* send to client (readbytes) */
-		send (cfd, buf, status, 0);
-		DataLen -= status;
+		/* Send data of DataLen bytes */
+		while (DataLen > 0)
+		{
+			/* Read data */
+			status = read (fd, buf, 1024);
+			/* send to client (readbytes) */
+			send (cfd, buf, status, 0);
+			DataLen -= status;
+		}
 	}
 
 	close(fd);
@@ -213,16 +273,41 @@ static int IsSupported_Method(char *method)
 	status = strcmp (method, "GET");
 	if (status == 0)
 	{
-		return TRUE;
+		return METHOD_GET;
 	}
 	status = strcmp (method, "POST");
 	if (status == 0)
 	{
-		return TRUE;
+		return METHOD_UNSUPPORTED;
+	}
+	status = strcmp (method, "HEAD");
+	if (status == 0)
+	{
+		return METHOD_POST;
+	}
+	status = strcmp (method, "PUT");
+	if (status == 0)
+	{
+		return METHOD_UNSUPPORTED;
+	}
+	status = strcmp (method, "DELETE");
+	if (status == 0)
+	{
+		return METHOD_UNSUPPORTED;
+	}
+	status = strcmp (method, "OPTIONS");
+	if (status == 0)
+	{
+		return METHOD_UNSUPPORTED;
+	}
+	status = strcmp (method, "TRACE");
+	if (status == 0)
+	{
+		return METHOD_TRACE;
 	}
 	/* Unsupported method */
 
-	return FALSE;
+	return METHOD_UNSUPPORTED;
 }
 
 static int send_response_header (int cfd, int resp, int type, int len)
@@ -237,6 +322,16 @@ static int send_response_header (int cfd, int resp, int type, int len)
 			offset += ret;
 			break;
 		case HTTP_404:
+			ret = sprintf (buf+offset, "%s", HTTP_NOT_FOUND);
+			offset += ret;
+			break;
+		case HTTP_500:
+			ret = sprintf (buf+offset, "%s", HTTP_SERVER_ERR);
+			offset += ret;
+			break;
+		case HTTP_501:
+			ret = sprintf (buf+offset, "%s", HTTP_NOT_IMPLEMENT);
+			offset += ret;
 			break;
 		default:
 			/* Unsupported */
@@ -257,12 +352,18 @@ static int send_response_header (int cfd, int resp, int type, int len)
 			offset += ret;
 			break;
 		case HTTP_TEXT_PLAIN:
+			ret = sprintf (buf+offset, "%s", CONTENT_TYPE_HTML);
+			offset += ret;
+			break;
+		case HTTP_TRACE:
+			ret = sprintf (buf+offset, "%s", CONTENT_TYPE_TRACE);
+			offset += ret;
 			break;
 		default:
 			/* Unsupported */
 			return FAIL;
 	}
-	ret = sprintf (buf+offset, "%s", CONNECTION_ALIVE);
+	ret = sprintf (buf+offset, "%s", CONNECTION_CLOSED);
 	offset += ret;
 	ret = sprintf (buf+offset, "%s", HTTP_NEW_LINE);;
 	offset += ret;
